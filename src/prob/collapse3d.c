@@ -32,7 +32,7 @@ void problem(DomainS *pDomain)
   int iwhich = 0;
   Real x1,x2,x3,x1min,x1max,x2min,x2max,x3min,x3max;
   Real x1len,x2len,x3len,dx1,dx2,dx3,x10,x20,x30,r2;
-  Real huge=1.0e60,radius=0.0,sig0=0.0;
+  Real huge=1.0e60,radius=0.0,sig0=0.0,Rc;
 
 #ifdef MPI_PARALLEL
   int myid = myID_Comm_world;
@@ -58,10 +58,13 @@ void problem(DomainS *pDomain)
   x30      = par_getd("problem","x30" );
   radius   = par_getd("problem","radius");
   sig0     = par_getd("problem","sig0");
-  iwhich   = par_geti("problem","iwhich");
+  iwhich   = par_getd("problem","iwhich");
 #ifdef SELF_GRAVITY
-  four_pi_G= par_getd("problem","four_pi_G");
+  four_pi_G= par_getd("problem","G")*(4*PI);
 #endif
+
+  if(iwhich == 2)
+   Rc = par_getd("problem","Critical Radius(Rc)") ;
   if (myid == 0) {
     fprintf(stdout,"[collapse3d]: d0        = %13.5e\n",d0);
     fprintf(stdout,"[collapse3d]: d1        = %13.5e\n",d1);
@@ -115,7 +118,7 @@ void problem(DomainS *pDomain)
   dx1   = pGrid->dx1;
   dx2   = pGrid->dx2;
   dx3   = pGrid->dx3;
-  x1min = par_getd("grid","x1min");
+ /* x1min = par_getd("grid","x1min");
   x1max = par_getd("grid","x1max");
   x2min = par_getd("grid","x2min");
   x2max = par_getd("grid","x2max");
@@ -129,7 +132,8 @@ void problem(DomainS *pDomain)
     fprintf(stdout,"[collapse3d]: x1max = %13.5e, x2max = %13.5e, x3max = %13.5e\n",x1max,x2max,x3max);
     fprintf(stdout,"[collapse3d]: dx1   = %13.5e, dx2   = %13.5e, dx3   = %13.5e\n",dx1,dx2,dx3);
     fprintf(stdout,"[collapse3d]: x1len = %13.5e, x2len = %13.5e, x3len = %13.5e\n",x1len,x2len,x3len);
-  }
+*/ 
+  
 
   if (ndim == 3) { /* this is the 3D case */
     for (k=ks; k<=ke; k++) {
@@ -140,8 +144,8 @@ void problem(DomainS *pDomain)
           r2  = sqrt(SQR(x1-x10)+SQR(x2-x20)+SQR(x3-x30));          
           switch (iwhich) {
           case 0: {
-            pGrid->U[k][j][i].d = d0 +
-              0.5*(d1-d0)*(1.0-tanh((r2-radius)/(sig0*radius)));
+            pGrid->U[k][j][i].d = d0; 
+              //0.5*(d1-d0)*(1.0-tanh((r2-radius)/(sig0*radius)));
             break;
           }
           case 1: {
@@ -149,11 +153,16 @@ void problem(DomainS *pDomain)
              (0.75*d0/(PI*radius*radius*radius))*pow((1.0+SQR(r2/radius)),-2.5);
             break;
           }
+
+          case 2: {
+            pGrid->U[k][j][i].d = d0*Rc*Rc/(r2*r2+Rc*Rc);
+            break;
+          }
 	  default: ath_error("[collapse3d]: invalid iwhich\n");
           }
-          pGrid->U[k][j][i].M1 = 0.0;
-          pGrid->U[k][j][i].M2 = 0.0;
-          pGrid->U[k][j][i].M3 = 0.0;
+          pGrid->U[k][j][i].M1 = pGrid->U[k][j][i].d*vx0;
+          pGrid->U[k][j][i].M2 = pGrid->U[k][j][i].d*vy0;
+          pGrid->U[k][j][i].M3 = pGrid->U[k][j][i].d*vz0;
 #ifdef MHD
           pGrid->B1i[k][j][i]  = bx0;
           pGrid->B2i[k][j][i]  = by0;
@@ -213,6 +222,8 @@ void problem(DomainS *pDomain)
     }
   }
 
+grav_mean_rho = d0;
+
   return;
 }
 
@@ -227,6 +238,9 @@ void problem(DomainS *pDomain)
 
 void problem_write_restart(MeshS *pM, FILE *fp)
 {
+  grav_mean_rho = d0;
+  four_pi_G= par_getd("problem","G")*(4*PI);
+  
   return;
 }
 
@@ -234,7 +248,9 @@ void problem_write_restart(MeshS *pM, FILE *fp)
  */
 
 void problem_read_restart(MeshS *pM, FILE *fp)
-{
+{ 
+    grav_mean_rho = d0;
+  four_pi_G= par_getd("problem","G")*(4*PI);
   return;
 }
 
